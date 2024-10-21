@@ -1,0 +1,61 @@
+apiVersion: integration.ibm.com/v1beta1
+kind: IntegrationAssembly
+metadata:
+  labels:
+    template-name: agapitemplate1
+  name: agdemolead
+  namespace: cp4i
+spec:
+  license:
+    accept: true
+    license: L-JTPV-KYG8TF
+    use: CloudPakForIntegrationNonProduction
+  managedInstances:
+    list: []
+  managedIntegrations:
+    list:
+      - kind: Product
+        metadata:
+          name: agdemoleadproduct
+        spec:
+          apis:
+            integrationRuntimes:
+              - name: agdemoleadir
+          definition:
+            info:
+              name: agdemoleadprod
+              title: agdemoleadprod
+              version: '1.0'
+            plans:
+              default-plan:
+                approval: false
+                description: Default Plan
+                rate-limits:
+                  default:
+                    value: 100/1hour
+                title: Default Plan
+            product: 1.0.0
+          share:
+            apim:
+              catalog: main-demo-catalog
+              credentialsSecret: apim-credentials
+              providerOrg: main-demo
+          state: Published
+      - kind: IntegrationRuntime
+        metadata:
+          name: agdemoleadir
+        spec:
+          barURL:
+            - >-
+              https://github.com/andygblue/agdemos/raw/main/LeadsAPI/BARFiles/agdemolead.bar
+          configurations:
+            - barauth-empty
+            - agdemodesigner-designer-acc
+          telemetry:
+            tracing:
+              openTelemetry:
+                enabled: true
+  storage:
+    readWriteOnce:
+      class: ocs-storagecluster-ceph-rbd
+  version: 16.1.0
