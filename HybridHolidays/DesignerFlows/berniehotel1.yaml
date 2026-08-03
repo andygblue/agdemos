@@ -1,0 +1,114 @@
+$integration: http://ibm.com/appconnect/integration/v2/integrationFile
+integration:
+  type: trigger-action
+  trigger-interfaces:
+    trigger-interface-1:
+      type: request-trigger
+      connector-type: iiboc
+      triggers:
+        INVOKE:
+          assembly:
+            $ref: '#/integration/assemblies/assembly-1'
+          input-context:
+            data: input
+          options:
+            connectorServiceOptions:
+              httpMethod: post
+              path: resources/input/operations/INVOKE/subscribe
+              action: invoke
+      account-name: Account 2
+  action-interfaces: {}
+  assemblies:
+    assembly-1:
+      assembly:
+        execute:
+          - parse:
+              parse-format: json
+              source:
+                template: '{{$Trigger.message}}'
+                input:
+                  - variable: Trigger
+                    $ref: '#/trigger/payload'
+                  - variable: flowDetails
+                    $ref: '#/flowDetails'
+              sample-data: |-
+                {
+                    "checkin": "1985-04-12T23:20:50.52Z",
+                    "city": "SampleCity",
+                    "customerref": "SampleCustomerref",
+                    "nights": 1
+                  }
+              output-schema:
+                $schema: http://json-schema.org/draft-04/schema#
+                type: object
+                properties:
+                  checkin:
+                    type: string
+                  city:
+                    type: string
+                  customerref:
+                    type: string
+                  nights:
+                    type: number
+                title: Parsed JSON
+              name: JSON Parser Parse
+          - set-variable:
+              map:
+                $map: http://ibm.com/appconnect/map/v1
+                input:
+                  - variable: Trigger
+                    $ref: '#/trigger/payload'
+                  - variable: JSONParserParse
+                    $ref: '#/node-output/JSON Parser Parse/response/payload'
+                  - variable: flowDetails
+                    $ref: '#/flowDetails'
+                customSchemas:
+                  properties.`variable`:
+                    type: object
+                    properties:
+                      price:
+                        type: number
+                mappings:
+                  - variable:
+                      mappings:
+                        - price:
+                            expression: $round($JSONParserParse.nights  *100*$random() )
+              name: Set variable
+          - response:
+              name: Callable flow Reply
+              reply-maps:
+                - title: Callable flow reply
+                  status-code: '200'
+                  map:
+                    customSchemas:
+                      properties.`message`:
+                        type: object
+                        properties:
+                          hotel:
+                            type: string
+                          cost:
+                            type: number
+                          clusterref:
+                            type: string
+                    $map: http://ibm.com/appconnect/map/v1
+                    input:
+                      - variable: Trigger
+                        $ref: '#/trigger/payload'
+                      - variable: JSONParserParse
+                        $ref: '#/node-output/JSON Parser Parse/response/payload'
+                      - variable: Setvariable
+                        $ref: '#/node-output/Set variable/response/payload'
+                      - variable: flowDetails
+                        $ref: '#/flowDetails'
+                    mappings:
+                      - message:
+                          mappings:
+                            - clusterref:
+                                template: local {{$flowDetails.instanceId}}
+                            - cost:
+                                expression: $Setvariable.variable.price *2
+                            - hotel:
+                                template: BERNIE Hotel {{$JSONParserParse.city}}
+                  input: []
+  name: berniehotel1
+models: {}

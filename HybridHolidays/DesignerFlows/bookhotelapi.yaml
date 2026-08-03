@@ -1,0 +1,316 @@
+$integration: http://ibm.com/appconnect/integration/v2/integrationFile
+integration:
+  type: api
+  trigger-interfaces:
+    trigger-interface-1:
+      triggers:
+        createBooking:
+          assembly:
+            $ref: '#/integration/assemblies/assembly-1'
+          input-context:
+            data: createBooking
+          output-context:
+            data: createBooking
+      options:
+        resources:
+          - business-object: booking
+            triggers:
+              create: createBooking
+            model:
+              $ref: '#/models/booking'
+      type: api-trigger
+  action-interfaces:
+    action-interface-1:
+      type: api-action
+      business-object: request
+      connector-type: iiboc
+      account-name: Account 2
+      actions:
+        INVOKEACTION: {}
+      options:
+        connectorServiceOptions:
+          httpMethod: post
+          path: >-
+            resources/application/{application}/endpoint/{endpoint}/request/operations/INVOKEACTION
+          action: custom
+  assemblies:
+    assembly-1:
+      assembly:
+        execute:
+          - set-variable:
+              map:
+                $map: http://ibm.com/appconnect/map/v1
+                input:
+                  - variable: flowDetails
+                    $ref: '#/flowDetails'
+                  - variable: Request
+                    $ref: '#/trigger/payload'
+                customSchemas:
+                  properties.`variable`:
+                    type: object
+                    properties:
+                      hotelProviders:
+                        type: array
+                        items:
+                          type: string
+                mappings:
+                  - variable:
+                      mappings:
+                        - hotelProviders:
+                            expression: '[''acme'',''bernie'',''chris'']'
+              name: Set variable
+          - for-each:
+              map:
+                $map: http://ibm.com/appconnect/map/v1
+                customSchemas:
+                  properties.`output`:
+                    type: object
+                    properties:
+                      clusterref:
+                        type: string
+                      hotel:
+                        type: string
+                      cost:
+                        type: number
+                input:
+                  - variable: Setvariable
+                    $ref: '#/node-output/Set variable/response/payload'
+                  - variable: CallableflowInvoke
+                    $ref: >-
+                      #/block/For each/node-output/Callable flow
+                      Invoke/response/payload
+                  - variable: JSONParserParse
+                    $ref: >-
+                      #/block/For each/node-output/JSON Parser
+                      Parse/response/payload
+                  - variable: Foreachitem
+                    $ref: '#/block/For each/current-item'
+                  - variable: flowDetails
+                    $ref: '#/flowDetails'
+                mappings:
+                  - output:
+                      mappings:
+                        - clusterref:
+                            template: '{{$JSONParserParse.clusterref}}'
+                        - cost:
+                            expression: '$JSONParserParse.cost '
+                        - hotel:
+                            template: '{{$JSONParserParse.hotel}}'
+              source:
+                expression: '$Setvariable.variable.hotelProviders '
+                input:
+                  - variable: Setvariable
+                    $ref: '#/node-output/Set variable/response/payload'
+                  - variable: flowDetails
+                    $ref: '#/flowDetails'
+                  - variable: Request
+                    $ref: '#/trigger/payload'
+              mode: sequential
+              continue-on-error: true
+              name: For each
+              assembly:
+                $ref: '#/integration/assemblies/assembly-2'
+              display-name: Hotel Provider
+          - response:
+              name: response
+              reply-maps:
+                - title: booking successfully created
+                  status-code: 201
+                  map:
+                    mappings:
+                      - checkin:
+                          template: '{{$Request.checkin}}'
+                      - city:
+                          template: '{{$Request.city}}'
+                      - customer:
+                          template: '{{$Request.customer}}'
+                      - customerref:
+                          template: '{{$Request.customerref}}'
+                      - hotels:
+                          foreach:
+                            input: $Foreach.output
+                            iterator: hotelsItem
+                            mappings:
+                              - clusterref:
+                                  template: '{{$hotelsItem.clusterref}}'
+                              - hotelname:
+                                  template: '{{$hotelsItem.hotel}}'
+                              - price:
+                                  expression: '$hotelsItem.cost '
+                      - nights:
+                          expression: '$Request.nights '
+                    $map: http://ibm.com/appconnect/map/v1
+                    input:
+                      - variable: Setvariable
+                        $ref: '#/node-output/Set variable/response/payload'
+                      - variable: Foreach
+                        $ref: '#/node-output/For each/response/payload'
+                      - variable: flowDetails
+                        $ref: '#/flowDetails'
+                      - variable: Request
+                        $ref: '#/trigger/payload'
+    assembly-2:
+      assembly:
+        execute:
+          - custom-action:
+              name: Callable flow Invoke
+              target:
+                $ref: '#/integration/action-interfaces/action-interface-1'
+              action: INVOKEACTION
+              map:
+                mappings:
+                  - application:
+                      template: '{{$Foreachitem}}hotel1'
+                  - endpoint:
+                      template: default
+                  - message:
+                      mappings:
+                        - checkin:
+                            template: '{{$Request.checkin}}'
+                        - city:
+                            template: '{{$Request.city}}'
+                        - customerref:
+                            template: '{{$Request.customerref}}'
+                        - nights:
+                            expression: '$Request.nights '
+                customSchemas:
+                  properties.`message`:
+                    type: object
+                    properties:
+                      customerref:
+                        type: string
+                      checkin:
+                        type: string
+                      nights:
+                        type: number
+                      city:
+                        type: string
+                $map: http://ibm.com/appconnect/map/v1
+                input:
+                  - variable: Setvariable
+                    $ref: '#/node-output/Set variable/response/payload'
+                  - variable: Foreachitem
+                    $ref: '#/block/For each/current-item'
+                  - variable: flowDetails
+                    $ref: '#/flowDetails'
+                  - variable: Request
+                    $ref: '#/trigger/payload'
+              filter:
+                where:
+                  and:
+                    - application: '{{$Foreachitem}}hotel1'
+                    - endpoint: default
+                input:
+                  - variable: Setvariable
+                    $ref: '#/node-output/Set variable/response/payload'
+                  - variable: Foreachitem
+                    $ref: '#/block/For each/current-item'
+                  - variable: flowDetails
+                    $ref: '#/flowDetails'
+                  - variable: Request
+                    $ref: '#/trigger/payload'
+          - parse:
+              parse-format: json
+              source:
+                template: '{{$CallableflowInvoke.message}}'
+                input:
+                  - variable: Setvariable
+                    $ref: '#/node-output/Set variable/response/payload'
+                  - variable: CallableflowInvoke
+                    $ref: >-
+                      #/block/For each/node-output/Callable flow
+                      Invoke/response/payload
+                  - variable: Foreachitem
+                    $ref: '#/block/For each/current-item'
+                  - variable: flowDetails
+                    $ref: '#/flowDetails'
+                  - variable: Request
+                    $ref: '#/trigger/payload'
+              sample-data: |-
+                {
+                    "clusterref": "local tenant1",
+                    "cost": 1588,
+                    "hotel": "ACME Hotel Ibadirut"
+                  }
+              output-schema:
+                $schema: http://json-schema.org/draft-04/schema#
+                type: object
+                properties:
+                  clusterref:
+                    type: string
+                  cost:
+                    type: number
+                  hotel:
+                    type: string
+                title: Parsed JSON
+              name: JSON Parser Parse
+  name: bookhotelapi
+models:
+  booking:
+    name: booking
+    plural: booking
+    properties:
+      customer:
+        required: false
+        id: true
+        type: string
+      customerref:
+        required: false
+        id: false
+        type: string
+      city:
+        required: false
+        id: false
+        type: string
+      checkin:
+        required: false
+        id: false
+        type: date
+      nights:
+        required: false
+        id: false
+        type: number
+      hotels:
+        required: false
+        id: false
+        type:
+          - type:
+              hotelname:
+                required: false
+                id: false
+                type: string
+              price:
+                required: false
+                id: false
+                type: number
+              clusterref:
+                required: false
+                id: false
+                type: string
+    operations:
+      create: '#/integration/assemblies/assembly-1'
+    description: ''
+x-ibm-configuration:
+  gateway: datapower-api-gateway
+  type: rest
+  phase: realized
+  enforced: true
+  testable: true
+  cors:
+    enabled: true
+  assembly:
+    execute:
+      - invoke:
+          title: Invoke flow
+          version: 2.0.0
+          verb: keep
+          target-url: $(app-connect-designer-url)$(request.path)
+          follow-redirects: false
+          timeout: 60
+          parameter-control:
+            type: blocklist
+          header-control:
+            type: blocklist
+          inject-proxy-headers: true
+          username: $(app-connect-designer-username)
+          password: $(app-connect-designer-password)
